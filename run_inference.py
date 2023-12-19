@@ -22,14 +22,13 @@ if save_memory:
 
 
 config = OmegaConf.load('./configs/inference.yaml')
-model_ckpt =  config.pretrained_model
+model_ckpt = config.pretrained_model
 model_config = config.config_file
 
 model = create_model(model_config ).cpu()
 model.load_state_dict(load_state_dict(model_ckpt, location='cuda'))
 model = model.cuda()
 ddim_sampler = DDIMSampler(model)
-
 
 
 def aug_data_mask(image, mask):
@@ -164,7 +163,7 @@ def inference_single_image(ref_image, ref_mask, tar_image, tar_mask, guidance_sc
 
     ref = item['ref']
     tar = item['jpg'] 
-    hint = item['hint']
+    hint = item['hint']  # 512x512x4
     num_samples = 1
 
     control = torch.from_numpy(hint.copy()).float().cuda() 

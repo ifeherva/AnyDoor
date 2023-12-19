@@ -102,26 +102,27 @@ def get_bbox_from_mask(mask):
     return (y1,y2,x1,x2)
 
 
-def expand_bbox(mask,yyxx,ratio=[1.2,2.0], min_crop=0):
-    y1,y2,x1,x2 = yyxx
-    ratio = np.random.randint( ratio[0] * 10,  ratio[1] * 10 ) / 10
-    H,W = mask.shape[0], mask.shape[1]
+def expand_bbox(mask, yyxx, ratio=(1.2, 2.0), min_crop=0):
+    y1, y2, x1, x2 = yyxx
+    ratio = np.random.randint(ratio[0] * 10,  ratio[1] * 10) / 10
+    H, W = mask.shape[0], mask.shape[1]
     xc, yc = 0.5 * (x1 + x2), 0.5 * (y1 + y2)
-    h = ratio * (y2-y1+1)
-    w = ratio * (x2-x1+1)
-    h = max(h,min_crop)
-    w = max(w,min_crop)
+    h = ratio * (y2 - y1 + 1)
+    w = ratio * (x2 - x1 + 1)
+    h = max(h, min_crop)
+    w = max(w, min_crop)
 
     x1 = int(xc - w * 0.5)
     x2 = int(xc + w * 0.5)
     y1 = int(yc - h * 0.5)
     y2 = int(yc + h * 0.5)
 
-    x1 = max(0,x1)
-    x2 = min(W,x2)
-    y1 = max(0,y1)
-    y2 = min(H,y2)
-    return (y1,y2,x1,x2)
+    x1 = max(0, x1)
+    x2 = min(W, x2)
+    y1 = max(0, y1)
+    y2 = min(H, y2)
+
+    return y1, y2, x1, x2
 
 
 def box2squre(image, box):
@@ -144,26 +145,28 @@ def box2squre(image, box):
     return (y1,y2,x1,x2)
 
 
-def pad_to_square(image, pad_value = 255, random = False):
-    H,W = image.shape[0], image.shape[1]
+def pad_to_square(image, pad_value=255, random=False):
+    H, W = image.shape[0], image.shape[1]
     if H == W:
         return image
 
     padd = abs(H - W)
     if random:
-        padd_1 = int(np.random.randint(0,padd))
+        padd_1 = int(np.random.randint(0, padd))
     else:
         padd_1 = int(padd / 2)
     padd_2 = padd - padd_1
 
     if H > W:
-        pad_param = ((0,0),(padd_1,padd_2),(0,0))
+        pad_param = ((0, 0), (padd_1, padd_2), (0, 0))
     else:
-        pad_param = ((padd_1,padd_2),(0,0),(0,0))
+        pad_param = ((padd_1, padd_2), (0, 0), (0, 0))
+
+    num_channels = image.ndim
+    pad_param = pad_param[:num_channels]
 
     image = np.pad(image, pad_param, 'constant', constant_values=pad_value)
     return image
-
 
 
 def box_in_box(small_box, big_box):
