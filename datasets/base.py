@@ -56,8 +56,8 @@ class BaseDataset(Dataset):
                 idx = np.random.choice(range(len(self)), 1)[0]
                 item = self.get_sample(idx)
                 return item
-            except:
-                idx = np.random.randint(0, len(self.data)-1)
+            except Exception as a:
+                idx = np.random.choice(range(len(self)), 1)[0]
                 
     def get_sample(self, idx):
         # Implemented for each specific dataset
@@ -207,6 +207,9 @@ class BaseDataset(Dataset):
         collage = collage / 127.5 - 1.0 
         collage = np.concatenate([collage, collage_mask[:, :, :1]], -1)
 
+        if cropped_target_dp_mask is not None:
+            collage = np.concatenate([collage, cropped_target_dp_mask[:,:, None]], -1)
+
         if ref_dp_mask_onehot is not None:
             masked_ref_image_aug = np.concatenate([masked_ref_image_aug, ref_dp_mask_onehot], -1)
         if tar_dp_mask_onehot is not None:
@@ -218,7 +221,6 @@ class BaseDataset(Dataset):
                 hint=collage.copy(),  # Collage for controlnet
                 extra_sizes=np.array([H1, W1, H2, W2]), 
                 tar_box_yyxx_crop=np.array(tar_box_yyxx_crop),
-                tar_dpmask=cropped_target_dp_mask,
                 )
 
         return item

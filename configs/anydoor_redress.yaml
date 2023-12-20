@@ -23,8 +23,8 @@ model:
       params:
         use_checkpoint: True
         image_size: 32 # unused
-        in_channels: 4
-        hint_channels: 4 #3
+        in_channels: 4 # 4
+        hint_channels: 5 #4+densepose 3
         model_channels: 320
         attention_resolutions: [ 4, 2, 1 ]
         num_res_blocks: 2

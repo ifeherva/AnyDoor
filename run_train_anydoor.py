@@ -49,7 +49,7 @@ def train_ad(opt):
     model = create_model(opt.model_conf).cpu()
 
     if opt.checkpoint_path is not None:
-        model.load_state_dict(load_state_dict(opt.checkpoint_path, location='cpu'), strict=False)
+        missing_keys, unexpected_keys = model.load_state_dict(load_state_dict(opt.checkpoint_path, location='cpu'), strict=False)
 
     model.learning_rate = opt.lr
     model.sd_locked = sd_locked
