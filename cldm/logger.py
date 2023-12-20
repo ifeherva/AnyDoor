@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 import torchvision
+import wandb
 from PIL import Image
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.utilities.distributed import rank_zero_only
@@ -11,7 +12,7 @@ from pytorch_lightning.utilities.distributed import rank_zero_only
 class ImageLogger(Callback):
     def __init__(self, batch_frequency=2000, max_images=4, clamp=True, increase_log_steps=True,
                  rescale=True, disabled=False, log_on_batch_idx=False, log_first_step=False,
-                 log_images_kwargs=None):
+                 log_images_kwargs=None, use_wandb=False):
         super().__init__()
         self.rescale = rescale
         self.batch_freq = batch_frequency
@@ -23,6 +24,7 @@ class ImageLogger(Callback):
         self.log_on_batch_idx = log_on_batch_idx
         self.log_images_kwargs = log_images_kwargs if log_images_kwargs else {}
         self.log_first_step = log_first_step
+        self.save_wandb = use_wandb
 
     @rank_zero_only
     def log_local(self, save_dir, split, images, global_step, current_epoch, batch_idx):
@@ -37,7 +39,13 @@ class ImageLogger(Callback):
             filename = "{}_gs-{:06}_e-{:06}_b-{:06}.png".format(k, global_step, current_epoch, batch_idx)
             path = os.path.join(root, filename)
             os.makedirs(os.path.split(path)[0], exist_ok=True)
-            Image.fromarray(grid).save(path)
+            grid_img = Image.fromarray(grid)
+            grid_img.save(path)
+
+            if self.save_wandb:
+                wandb.log({
+                    k: grid_img
+                }, step=global_step)
 
     def log_img(self, pl_module, batch, batch_idx, split="train"):
         check_idx = batch_idx  # if self.log_on_batch_idx else pl_module.global_step

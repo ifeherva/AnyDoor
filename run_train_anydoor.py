@@ -2,15 +2,13 @@ import argparse
 
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 
 from datasets.redress import RedressDataset
-from datasets.vitonhd import VitonHDDataset
 from cldm.logger import ImageLogger
 from cldm.model import create_model, load_state_dict
-from torch.utils.data import ConcatDataset
-from cldm.hack import disable_verbosity, enable_sliced_attention
-from omegaconf import OmegaConf
+import wandb
 
 
 def parse_args():
@@ -32,13 +30,21 @@ def parse_args():
     parser.add_argument('--num-workers', type=int, default=8)
     parser.add_argument('--accumulation-steps', type=int, default=1)
 
+    # Logging
+    parser.add_argument('--no-wandb', action='store_true')
+    parser.add_argument('--log-frequency', type=int, default=1000)
+
     return parser.parse_args()
 
 
 def train_ad(opt):
     print(opt)
 
-    logger_freq = 1000
+    if not opt.no_wandb:
+        logger = WandbLogger(project='AnyDoorTryon', config=opt)
+    else:
+        logger = None
+
     sd_locked = False
     only_mid_control = False
 
@@ -58,12 +64,14 @@ def train_ad(opt):
     dataset = RedressDataset(root=opt.data_root)
     dataloader = DataLoader(dataset, num_workers=opt.num_workers, batch_size=opt.batch_size, shuffle=True)
 
-    logger = ImageLogger(batch_frequency=logger_freq)
-    trainer = pl.Trainer(gpus=n_gpus, strategy="ddp", precision=16, accelerator="gpu", callbacks=[logger],
-                         progress_bar_refresh_rate=1, accumulate_grad_batches=opt.accumulation_steps)
+    image_logger = ImageLogger(batch_frequency=opt.log_frequency, use_wandb=not opt.no_wandb)
+    trainer = pl.Trainer(gpus=n_gpus, strategy="ddp", precision=16, accelerator="gpu", callbacks=[image_logger],
+                         progress_bar_refresh_rate=1, accumulate_grad_batches=opt.accumulation_steps,
+                         logger=logger)
 
     # Run training
     trainer.fit(model, dataloader)
+    wandb.finish()
 
 
 if __name__ == '__main__':
