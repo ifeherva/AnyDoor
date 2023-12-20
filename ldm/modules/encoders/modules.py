@@ -348,6 +348,7 @@ class FrozenDinoV2Encoder(AbstractEncoder):
         self.model.eval()
         for param in self.model.parameters():
             param.requires_grad = False
+        self.model = torch.compile(self.model)
 
     def forward(self, image):
         if isinstance(image, list):
@@ -363,7 +364,8 @@ class FrozenDinoV2Encoder(AbstractEncoder):
             ], 1)
 
         image = (image.to(self.device) - self.image_mean.to(self.device)) / self.image_std.to(self.device)
-        features = self.model.forward_features(image)
+        with torch.no_grad():
+            features = self.model.forward_features(image)
         tokens = features["x_norm_patchtokens"]
         image_features = features["x_norm_clstoken"]
         image_features = image_features.unsqueeze(1)
