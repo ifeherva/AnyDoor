@@ -47,7 +47,7 @@ class ImageLogger(Callback):
 
             if self.save_wandb:
                 wandb.log({
-                    k: grid_img
+                    k: wandb.Image(grid_img),
                 }, step=global_step)
 
     def log_img(self, pl_module, batch, batch_idx, split="train"):
@@ -66,6 +66,8 @@ class ImageLogger(Callback):
                 images = pl_module.log_images(batch, split=split, **self.log_images_kwargs)
 
             for k in images:
+                if images[k].shape[1] > 3:
+                    images[k] = images[k][:, :3]
                 N = min(images[k].shape[0], self.max_images)
                 images[k] = images[k][:N]
                 if isinstance(images[k], torch.Tensor):
