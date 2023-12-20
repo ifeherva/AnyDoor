@@ -341,7 +341,7 @@ class ControlLDM(LatentDiffusion):
 
     @torch.no_grad()
     def get_unconditional_conditioning(self, N):
-        uncond =  self.get_learned_conditioning([ torch.zeros((1,3,224,224)) ] * N)
+        uncond = self.get_learned_conditioning([torch.zeros((1, 3 + 25 + 25, 224, 224))] * N) # Added densepose
         return uncond
 
     @torch.no_grad()

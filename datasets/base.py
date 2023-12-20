@@ -8,9 +8,8 @@ import albumentations as A
 
 
 class BaseDataset(Dataset):
-    def __init__(self):
-        image_mask_dict = {}
-        self.data = []
+    def __init__(self, dynamic=2):
+        self.dynamic = dynamic
 
     def __len__(self):
         # We adjust the ratio of different dataset by setting the length.
@@ -54,7 +53,7 @@ class BaseDataset(Dataset):
     def __getitem__(self, idx):
         while True:
             try:
-                idx = np.random.randint(0, len(self.data)-1)
+                idx = np.random.choice(range(len(self)), 1)[0]
                 item = self.get_sample(idx)
                 return item
             except:
@@ -125,9 +124,19 @@ class BaseDataset(Dataset):
             ref_dp_mask = pad_to_square(ref_dp_mask, pad_value=0, random=False)
             ref_dp_mask = cv2.resize(ref_dp_mask.astype(np.uint8), (224, 224),
                                      interpolation=cv2.INTER_NEAREST).astype(np.float32)
-            ref_dp_mask = ref_dp_mask / 24  # number of DP classes -1
+            # to one-hot
+            ref_dp_mask_onehot = (np.arange(25) == ref_dp_mask[..., None]).astype(np.uint8)  # HxWx25
         else:
-            ref_dp_mask = None
+            ref_dp_mask_onehot = None
+
+        if tar_dp_mask is not None:
+            tar_dp_mask_t = pad_to_square(tar_dp_mask, pad_value=0, random=False)
+            tar_dp_mask_t = cv2.resize(tar_dp_mask_t.astype(np.uint8), (224, 224),
+                                     interpolation=cv2.INTER_NEAREST).astype(np.float32)
+            # to one-hot
+            tar_dp_mask_onehot = (np.arange(25) == tar_dp_mask_t[..., None]).astype(np.uint8)  # HxWx25
+        else:
+            tar_dp_mask_onehot = None
 
         ref_mask_3 = pad_to_square(ref_mask_3 * 255, pad_value=0, random=False)
         ref_mask_3 = cv2.resize(ref_mask_3.astype(np.uint8), (224, 224)).astype(np.uint8)
@@ -197,15 +206,19 @@ class BaseDataset(Dataset):
         cropped_target_image = cropped_target_image / 127.5 - 1.0
         collage = collage / 127.5 - 1.0 
         collage = np.concatenate([collage, collage_mask[:, :, :1]], -1)
+
+        if ref_dp_mask_onehot is not None:
+            masked_ref_image_aug = np.concatenate([masked_ref_image_aug, ref_dp_mask_onehot], -1)
+        if tar_dp_mask_onehot is not None:
+            masked_ref_image_aug = np.concatenate([masked_ref_image_aug, tar_dp_mask_onehot], -1)
         
         item = dict(
-                ref=masked_ref_image_aug.copy(), 
+                ref=masked_ref_image_aug.copy(),  # for dino
                 jpg=cropped_target_image.copy(),  # ground truth
                 hint=collage.copy(),  # Collage for controlnet
                 extra_sizes=np.array([H1, W1, H2, W2]), 
                 tar_box_yyxx_crop=np.array(tar_box_yyxx_crop),
                 tar_dpmask=cropped_target_dp_mask,
-                ref_dpmask=ref_dp_mask,
                 )
 
         return item

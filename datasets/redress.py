@@ -123,6 +123,7 @@ class RedressDataset(BaseDataset):
                  root: str,
                  split='train',
                  body_types=('full_body', 'upper_body')):
+        super().__init__()
         self.root = root
         self.pairs = []
         self.split = split

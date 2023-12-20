@@ -5,6 +5,8 @@ from torch.utils.checkpoint import checkpoint
 from transformers import T5Tokenizer, T5EncoderModel, CLIPTokenizer, CLIPTextModel
 import torchvision.transforms as T
 import open_clip
+
+from ldm.modules.diffusionmodules.util import conv_nd
 from ldm.util import default, count_params
 from PIL import Image
 from open_clip.transform import image_transform
@@ -276,11 +278,40 @@ config_path = './configs/anydoor.yaml'
 config = OmegaConf.load(config_path)
 DINOv2_weight_path = config.model.params.cond_stage_config.weight
 
+
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, padding, stride=1):
+        super().__init__()
+
+        self.conv = conv_nd(2, in_channels, out_channels,
+                            kernel_size, padding=padding, stride=stride)
+        self.act = nn.SiLU()
+
+    def forward(self, x):
+        res = x
+        x = self.conv(x)
+        x = self.act(x)
+        x = x + res
+        return x
+
+
+class DensePoseEncoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.model = nn.Sequential(
+            ResBlock()
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
 class FrozenDinoV2Encoder(AbstractEncoder):
     """
     Uses the DINOv2 encoder for image
     """
-    def __init__(self, device="cuda", freeze=True):
+    def __init__(self, device="cuda", freeze=True, use_densepose=False):
         super().__init__()
         dinov2 = hubconf.dinov2_vitg14() 
         state_dict = torch.load(DINOv2_weight_path)
@@ -290,8 +321,28 @@ class FrozenDinoV2Encoder(AbstractEncoder):
         if freeze:
             self.freeze()
         self.image_mean = torch.tensor([0.485, 0.456, 0.406]).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-        self.image_std =  torch.tensor([0.229, 0.224, 0.225]).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)        
-        self.projector = nn.Linear(1536,1024)
+        self.image_std = torch.tensor([0.229, 0.224, 0.225]).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+        self.projector = nn.Linear(1536, 1024)
+        self.use_densepose = use_densepose
+
+        if use_densepose:
+            # Make it separate class, add res connection, 4 blocks
+            self.pose_projector = nn.Sequential(
+                conv_nd(2, 25, 128, 7, padding=3, stride=2),
+                nn.SiLU(),
+                nn.MaxPool2d(kernel_size=3, stride=2, padding=1),  # 56x56
+                ResBlock(128, 128, 3, padding=1, stride=1),  # 56x56
+                conv_nd(2, 128, 256, 3, padding=1, stride=2),  # 28x28
+                nn.SiLU(),
+                ResBlock(256, 256, 3, padding=1, stride=1),  # 28x28
+                conv_nd(2, 256, 512, 3, padding=1, stride=2),  # 14x14
+                nn.SiLU(),
+                ResBlock(512, 512, 3, padding=1, stride=1),  # 14x14
+                conv_nd(2, 512, 1024, 3, padding=1, stride=2),  # 7x7
+                nn.SiLU(),
+                nn.AdaptiveAvgPool2d((1, 1)),
+                nn.Flatten(),
+            )
 
     def freeze(self):
         self.model.eval()
@@ -299,16 +350,27 @@ class FrozenDinoV2Encoder(AbstractEncoder):
             param.requires_grad = False
 
     def forward(self, image):
-        if isinstance(image,list):
-            image = torch.cat(image,0)
+        if isinstance(image, list):
+            image = torch.cat(image, 0)
 
-        image = (image.to(self.device)  - self.image_mean.to(self.device)) / self.image_std.to(self.device)
+        if self.use_densepose:
+            image, dp_ref, dp_tar = image.split((3, 25, 25), 1)
+            dp_ref = dp_ref.to(self.device)
+            dp_tar = dp_tar.to(self.device)
+            dense_proj = torch.cat([
+                self.pose_projector(dp_ref).unsqueeze(1),  # Bx1x1024
+                self.pose_projector(dp_tar).unsqueeze(1),  # Bx1x1024
+            ], 1)
+
+        image = (image.to(self.device) - self.image_mean.to(self.device)) / self.image_std.to(self.device)
         features = self.model.forward_features(image)
         tokens = features["x_norm_patchtokens"]
-        image_features  = features["x_norm_clstoken"]
+        image_features = features["x_norm_clstoken"]
         image_features = image_features.unsqueeze(1)
-        hint = torch.cat([image_features,tokens],1) # 8,257,1024
+        hint = torch.cat([image_features, tokens], 1)  # 8,257,1024
         hint = self.projector(hint)
+        if self.use_densepose:
+            hint = torch.cat([hint, dense_proj], 1)
         return hint
 
     def encode(self, image):

@@ -20,6 +20,7 @@ def parse_args():
     parser.add_argument('--data-root', type=str, default='/media/istvanfe/MLStuff/Datasets/Redress')
 
     # Model
+    parser.add_argument('--model-conf', type=str, default='./configs/anydoor_redress.yaml')
     parser.add_argument('--checkpoint-path', type=str, default=None)
 
     # Training
@@ -45,7 +46,7 @@ def train_ad(opt):
     print(f'Using {n_gpus} GPUs')
 
     # First use cpu to load models. Pytorch Lightning will automatically move it to GPUs.
-    model = create_model('./configs/anydoor.yaml').cpu()
+    model = create_model(opt.model_conf).cpu()
 
     if opt.checkpoint_path is not None:
         model.load_state_dict(load_state_dict(opt.checkpoint_path, location='cpu'), strict=False)
@@ -62,7 +63,7 @@ def train_ad(opt):
                          progress_bar_refresh_rate=1, accumulate_grad_batches=opt.accumulation_steps)
 
     # Run training
-    # trainer.fit(model, dataloader)
+    trainer.fit(model, dataloader)
 
 
 if __name__ == '__main__':
