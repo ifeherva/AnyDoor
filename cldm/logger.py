@@ -28,7 +28,8 @@ class ImageLogger(Callback):
 
     @rank_zero_only
     def log_local(self, save_dir, split, images, global_step, current_epoch, batch_idx):
-        root = os.path.join(save_dir, "image_log", split)
+        if save_dir is not None:
+            root = os.path.join(save_dir, "image_log", split)
         for k in images:
             grid = torchvision.utils.make_grid(images[k], nrow=4)
             if self.rescale:
@@ -36,11 +37,13 @@ class ImageLogger(Callback):
             grid = grid.transpose(0, 1).transpose(1, 2).squeeze(-1)
             grid = grid.numpy()
             grid = (grid * 255).astype(np.uint8)
-            filename = "{}_gs-{:06}_e-{:06}_b-{:06}.png".format(k, global_step, current_epoch, batch_idx)
-            path = os.path.join(root, filename)
-            os.makedirs(os.path.split(path)[0], exist_ok=True)
             grid_img = Image.fromarray(grid)
-            grid_img.save(path)
+
+            if save_dir is not None:
+                filename = "{}_gs-{:06}_e-{:06}_b-{:06}.png".format(k, global_step, current_epoch, batch_idx)
+                path = os.path.join(root, filename)
+                os.makedirs(os.path.split(path)[0], exist_ok=True)
+                grid_img.save(path)
 
             if self.save_wandb:
                 wandb.log({
