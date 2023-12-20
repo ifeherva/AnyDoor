@@ -94,7 +94,7 @@ class BaseDataset(Dataset):
 
     def process_pairs(self, ref_image, ref_mask, tar_image, tar_mask, max_ratio=0.8,
                       ref_dp_mask=None, tar_dp_mask=None):
-        assert mask_score(ref_mask) > 0.90
+        assert mask_score(ref_mask) > 0.50
         assert self.check_mask_area(ref_mask)
         assert self.check_mask_area(tar_mask)
 
