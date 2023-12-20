@@ -360,14 +360,17 @@ class ControlLDM(LatentDiffusion):
         log["reconstruction"] = self.decode_first_stage(z) 
 
         # ==== visualize the shape mask or the high-frequency map ====
-        guide_mask = (c_cat[:,-1,:,:].unsqueeze(1) + 1) * 0.5
-        guide_mask = torch.cat([guide_mask,guide_mask,guide_mask],1)
-        HF_map  = c_cat[:,:3,:,:] #* 2.0 - 1.0
+        guide_mask = (c_cat[:, -1, :, :].unsqueeze(1) + 1) * 0.5
+        # guide_mask = torch.cat([guide_mask,guide_mask,guide_mask],1)
+        HF_map = c_cat[:, :3, :, :] #* 2.0 - 1.0
 
         log["control"] = HF_map
 
-        cond_image = batch[self.cond_stage_key].cpu().numpy().copy() 
-        log["conditioning"] = torch.permute( torch.tensor(cond_image), (0,3,1,2)) * 2.0 - 1.0  
+        cond_image = batch[self.cond_stage_key].cpu().numpy().copy()
+        if cond_image.shape[1] > 3:
+            # densepose is concatenated, make sure we drop it
+            cond_image = cond_image[:, :3]
+        log["conditioning"] = torch.permute(torch.tensor(cond_image), (0, 3, 1, 2)) * 2.0 - 1.0
         if plot_diffusion_rows:
             # get diffusion row
             diffusion_row = list()
