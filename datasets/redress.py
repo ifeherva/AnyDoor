@@ -64,6 +64,17 @@ MASK_GARMENT_ITEMS = {
     ],
 }
 
+MASK_TARGET_ITEMS = {
+    'full_body': [
+        ATR5_MAP['upper_body_clothing'],
+        ATR5_MAP['lower_body_clothing'],
+        ATR5_MAP['belt'],
+    ],
+    'upper_body': [
+        ATR5_MAP['upper_body_clothing'],
+    ],
+}
+
 
 DP_MASK_TARGET_ITEMS = {
     'full_body': [
@@ -179,9 +190,11 @@ class RedressDataset(BaseDataset):
 
         # Load target mask
         tar_mask_path = join(root, 'atr5_labels', tar_image_name.replace('jpg', 'png'))
-        # tar_mask = np.array(Image.open(tar_mask_path).convert('P'))  # HxW
-        # We use the densepose to determine where to insert
-        tar_mask = np.isin(tar_dp_mask, DP_MASK_TARGET_ITEMS[btype]).astype(np.uint8)
+        tar_mask = np.array(Image.open(tar_mask_path).convert('P'))  # HxW
+        # We use the atr_mask+densepose to determine where to insert
+        tar_mask_dp = np.isin(tar_dp_mask, DP_MASK_TARGET_ITEMS[btype])
+        tar_mask_atr = np.isin(tar_mask, MASK_TARGET_ITEMS[btype])
+        tar_mask = np.logical_or(tar_mask_dp, tar_mask_atr).astype(np.uint8)
 
         item_with_collage = self.process_pairs(ref_image, ref_mask, tar_image, tar_mask, max_ratio=1.0,
                                                ref_dp_mask=ref_dp_mask, tar_dp_mask=tar_dp_mask)
