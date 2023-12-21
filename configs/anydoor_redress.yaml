@@ -17,6 +17,7 @@ model:
     scale_factor: 0.18215
     use_ema: False
     only_mid_control: False
+    sd_locked: False
 
     control_stage_config:
       target: cldm.cldm.ControlNet

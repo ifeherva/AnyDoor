@@ -121,12 +121,16 @@ DP_MASK_TARGET_ITEMS = {
 class RedressDataset(BaseDataset):
     def __init__(self,
                  root: str,
+                 num_devices: int = 1,
+                 batch_size: int = 8,
                  split='train',
                  body_types=('full_body', 'upper_body')):
         super().__init__()
         self.root = root
         self.pairs = []
         self.split = split
+        self.num_devices = num_devices
+        self.batch_size = batch_size
 
         for btype in body_types:
             broot = join(self.root, btype)
@@ -138,7 +142,7 @@ class RedressDataset(BaseDataset):
     def __len__(self) -> int:
         #return len(self.pairs)
         # this is fixed so we get shorter epochs
-        return 5000*4*8
+        return 10000 * self.num_devices * self.batch_size
 
     def get_sample(self, index):
         pair, btype = self.pairs[index]
