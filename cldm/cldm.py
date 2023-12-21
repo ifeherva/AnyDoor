@@ -430,6 +430,7 @@ class ControlLDM(LatentDiffusion):
             params += list(self.model.diffusion_model.output_blocks.parameters())
             params += list(self.model.diffusion_model.out.parameters())
         params += list(self.cond_stage_model.projector.parameters())
+        params += list(self.cond_stage_model.pose_projector.parameters())
         opt = torch.optim.AdamW(params, lr=lr)
         return opt
 
