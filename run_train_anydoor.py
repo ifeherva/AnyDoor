@@ -1,5 +1,6 @@
 import argparse
 
+from lightning_utilities.core.rank_zero import rank_zero_info
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.loggers import WandbLogger
@@ -39,7 +40,7 @@ def parse_args():
 
 
 def train_ad(opt):
-    print(opt)
+    rank_zero_info(opt)
 
     if not opt.no_wandb:
         logger = WandbLogger(project='AnyDoorTryon', config=opt, log_model='all', save_dir='checkpoints')
@@ -47,7 +48,7 @@ def train_ad(opt):
         logger = None
 
     n_gpus = opt.num_gpus or torch.cuda.device_count()
-    print(f'Using {n_gpus} GPUs')
+    rank_zero_info(f'Using {n_gpus} GPUs')
 
     # First use cpu to load models. Pytorch Lightning will automatically move it to GPUs.
     model = create_model(opt.model_conf).cpu()
