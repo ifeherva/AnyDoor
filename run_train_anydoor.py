@@ -41,7 +41,7 @@ def train_ad(opt):
     print(opt)
 
     if not opt.no_wandb:
-        logger = WandbLogger(project='AnyDoorTryon', config=opt)
+        logger = WandbLogger(project='AnyDoorTryon', config=opt, log_model='all')
     else:
         logger = None
 

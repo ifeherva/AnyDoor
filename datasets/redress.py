@@ -138,7 +138,7 @@ class RedressDataset(BaseDataset):
     def __len__(self) -> int:
         #return len(self.pairs)
         # this is fixed so we get shorter epochs
-        return 20000
+        return 5000*4*8
 
     def get_sample(self, index):
         pair, btype = self.pairs[index]
