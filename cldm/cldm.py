@@ -367,9 +367,9 @@ class ControlLDM(LatentDiffusion):
         log["control"] = HF_map
 
         cond_image = batch[self.cond_stage_key].cpu().numpy().copy()
-        if cond_image.shape[1] > 3:
+        if cond_image.shape[-1] > 3:
             # densepose is concatenated, make sure we drop it
-            cond_image = cond_image[:, :3]
+            cond_image = cond_image[..., :3]
         log["conditioning"] = torch.permute(torch.tensor(cond_image), (0, 3, 1, 2)) * 2.0 - 1.0
         if plot_diffusion_rows:
             # get diffusion row
