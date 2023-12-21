@@ -64,7 +64,7 @@ def train_ad(opt):
     image_logger = ImageLogger(batch_frequency=opt.log_frequency, use_wandb=not opt.no_wandb)
 
     max_epochs: int = opt.iterations // (len(dataset)//(n_gpus*opt.batch_size))
-    print(f'Max epochs: {max_epochs}')
+    rank_zero_info(f'Max epochs: {max_epochs}')
 
     trainer = pl.Trainer(
         strategy="ddp",

@@ -19,6 +19,19 @@ from ldm.models.diffusion.ddim import DDIMSampler
 
 
 class ControlledUnetModel(UNetModel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # freeze unused layers
+        for p in self.time_embed.parameters():
+            p.requires_grad = False
+
+        for p in self.input_blocks.parameters():
+            p.requires_grad = False
+
+        for p in self.middle_block.parameters():
+            p.requires_grad = False
+
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
         hs = []
         with torch.no_grad():
@@ -277,12 +290,16 @@ class ControlNet(nn.Module):
         self.middle_block_out = self.make_zero_conv(ch)
         self._feature_size += ch
 
+        # Freeze first input block as it gets replaced by the hint input
+        for p in self.input_blocks[0].parameters():
+            p.requires_grad = False
+
     def make_zero_conv(self, channels):
         return TimestepEmbedSequential(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))
 
     def forward(self, x, hint, timesteps, context, **kwargs):
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
-        emb = self.time_embed(t_emb) # 1,1280
+        emb = self.time_embed(t_emb)  # 1,1280
         
         # 1,320,64,64
         guided_hint = self.input_hint_block(hint, emb, context)
@@ -296,7 +313,7 @@ class ControlNet(nn.Module):
                 guided_hint = None
             else:
                 h_new = module(h, emb, context) 
-                h =  h_new 
+                h = h_new
             outs.append(zero_conv(h, emb, context))
 
         h_new = self.middle_block(h, emb, context)  
@@ -338,6 +355,7 @@ class ControlLDM(LatentDiffusion):
             control = self.control_model(x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt)
             control = [c * scale for c, scale in zip(control, self.control_scales)]
             eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
+
         return eps
 
     @torch.no_grad()
