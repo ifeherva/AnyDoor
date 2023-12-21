@@ -357,14 +357,14 @@ class ControlLDM(LatentDiffusion):
         c_cat, c = c["c_concat"][0][:N], c["c_crossattn"][0][:N]
         N = min(z.shape[0], N)
         n_row = min(z.shape[0], n_row)
-        log["reconstruction"] = self.decode_first_stage(z) 
+        log["reconstruction"] = self.decode_first_stage(z).cpu()
 
         # ==== visualize the shape mask or the high-frequency map ====
-        guide_mask = (c_cat[:, -1, :, :].unsqueeze(1) + 1) * 0.5
+        # guide_mask = (c_cat[:, -1, :, :].unsqueeze(1) + 1) * 0.5
         # guide_mask = torch.cat([guide_mask,guide_mask,guide_mask],1)
         HF_map = c_cat[:, :3, :, :] #* 2.0 - 1.0
 
-        log["control"] = HF_map
+        log["control"] = HF_map.cpu()
 
         cond_image = batch[self.cond_stage_key].cpu().numpy().copy()
         if cond_image.shape[-1] > 3:
@@ -411,7 +411,7 @@ class ControlLDM(LatentDiffusion):
                                              unconditional_conditioning=uc_full,
                                              )
             x_samples_cfg = self.decode_first_stage(samples_cfg)
-            log[f"samples_cfg_scale_{unconditional_guidance_scale:.2f}"] = x_samples_cfg #* 2.0 - 1.0
+            log[f"samples_cfg_scale_{unconditional_guidance_scale:.2f}"] = x_samples_cfg.cpu() #* 2.0 - 1.0
         return log
 
     @torch.no_grad()
