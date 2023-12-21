@@ -24,6 +24,7 @@ def parse_args():
     # Training
     parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--lr', type=float, default=1e-5)
+    parser.add_argument('--iterations', type=int, default=1000000)
 
     # Compute
     parser.add_argument('--num-gpus', type=int, default=None)
@@ -41,12 +42,9 @@ def train_ad(opt):
     print(opt)
 
     if not opt.no_wandb:
-        logger = WandbLogger(project='AnyDoorTryon', config=opt, log_model='all')
+        logger = WandbLogger(project='AnyDoorTryon', config=opt, log_model='all', save_dir='checkpoints')
     else:
         logger = None
-
-    sd_locked = False
-    only_mid_control = False
 
     n_gpus = opt.num_gpus or torch.cuda.device_count()
     print(f'Using {n_gpus} GPUs')
@@ -58,16 +56,25 @@ def train_ad(opt):
         missing_keys, unexpected_keys = model.load_state_dict(load_state_dict(opt.checkpoint_path, location='cpu'), strict=False)
 
     model.learning_rate = opt.lr
-    model.sd_locked = sd_locked
-    model.only_mid_control = only_mid_control
 
-    dataset = RedressDataset(root=opt.data_root)
+    dataset = RedressDataset(root=opt.data_root, num_devices=n_gpus, batch_size=opt.batch_size)
     dataloader = DataLoader(dataset, num_workers=opt.num_workers, batch_size=opt.batch_size, shuffle=True)
 
     image_logger = ImageLogger(batch_frequency=opt.log_frequency, use_wandb=not opt.no_wandb)
-    trainer = pl.Trainer(gpus=n_gpus, strategy="ddp", precision=16, accelerator="gpu", callbacks=[image_logger],
-                         progress_bar_refresh_rate=1, accumulate_grad_batches=opt.accumulation_steps,
-                         logger=logger)
+
+    max_epochs: int = opt.iterations // (len(dataset)//(n_gpus*opt.batch_size))
+    print(f'Max epochs: {max_epochs}')
+
+    trainer = pl.Trainer(
+        strategy="ddp",
+        precision=16,
+        accelerator="gpu",
+        callbacks=[image_logger],
+        # progress_bar_refresh_rate=1,
+        # accumulate_grad_batches=opt.accumulation_steps,
+        logger=logger,
+        max_epochs=max_epochs,
+    )
 
     # Run training
     trainer.fit(model, dataloader)
