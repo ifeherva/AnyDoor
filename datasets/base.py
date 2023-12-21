@@ -53,11 +53,11 @@ class BaseDataset(Dataset):
     def __getitem__(self, idx):
         while True:
             try:
-                idx = np.random.choice(range(len(self)), 1)[0]
+                idx = np.random.choice(range(len(self.pairs)), 1)[0]
                 item = self.get_sample(idx)
                 return item
             except Exception as a:
-                idx = np.random.choice(range(len(self)), 1)[0]
+                idx = np.random.choice(range(len(self.pairs)), 1)[0]
                 
     def get_sample(self, idx):
         # Implemented for each specific dataset
