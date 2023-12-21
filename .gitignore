@@ -1,4 +1,5 @@
 .idea/
+wandb
 
 training/
 lightning_logs/
