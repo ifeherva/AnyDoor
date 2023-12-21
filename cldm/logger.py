@@ -62,7 +62,7 @@ class ImageLogger(Callback):
             if is_train:
                 pl_module.eval()
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 images = pl_module.log_images(batch, split=split, **self.log_images_kwargs)
 
             for k in images:
