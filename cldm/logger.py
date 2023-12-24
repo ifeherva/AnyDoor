@@ -50,7 +50,7 @@ class ImageLogger(Callback):
                     k: wandb.Image(grid_img),
                 }, step=global_step)
 
-    def log_img(self, pl_module, batch, batch_idx, split="train"):
+    def log_img(self, pl_module, batch, batch_idx, split="train", rank=0):
         check_idx = batch_idx  # if self.log_on_batch_idx else pl_module.global_step
         if (self.check_frequency(check_idx) and  # batch_idx % self.batch_freq == 0
                 hasattr(pl_module, "log_images") and
@@ -86,4 +86,6 @@ class ImageLogger(Callback):
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if not self.disabled:
-            self.log_img(pl_module, batch, batch_idx, split="train")
+            rank = trainer.global_rank // trainer.world_size
+            self.log_img(pl_module, batch, batch_idx, split="train", rank=rank)
+

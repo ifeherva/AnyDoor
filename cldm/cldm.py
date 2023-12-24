@@ -370,6 +370,7 @@ class ControlLDM(LatentDiffusion):
                    use_ema_scope=True,
                    **kwargs):
         use_ddim = ddim_steps is not None
+        rank = kwargs.get('rank', 0)
 
         log = dict()
         z, c = self.get_input(batch, self.first_stage_key, bs=N)
@@ -428,6 +429,7 @@ class ControlLDM(LatentDiffusion):
                                              ddim_steps=ddim_steps, eta=ddim_eta,
                                              unconditional_guidance_scale=unconditional_guidance_scale,
                                              unconditional_conditioning=uc_full,
+                                             rank=rank,
                                              )
             x_samples_cfg = self.decode_first_stage(samples_cfg)
             log[f"samples_cfg_scale_{unconditional_guidance_scale:.2f}"] = x_samples_cfg.cpu() #* 2.0 - 1.0

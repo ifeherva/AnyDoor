@@ -68,7 +68,7 @@ def train_ad(opt):
 
     trainer = pl.Trainer(
         strategy="ddp",
-        precision=16,
+        precision='16-mixed',
         accelerator="gpu",
         callbacks=[image_logger],
         # progress_bar_refresh_rate=1,

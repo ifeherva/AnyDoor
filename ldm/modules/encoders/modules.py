@@ -377,10 +377,3 @@ class FrozenDinoV2Encoder(AbstractEncoder):
 
     def encode(self, image):
         return self(image)
-
-
-
-
-
-
-

@@ -91,7 +91,7 @@ def resize_box(yyxx, H,W,h,w):
 
 
 def get_bbox_from_mask(mask):
-    h,w = mask.shape[0],mask.shape[1]
+    h,w = mask.shape[0], mask.shape[1]
 
     if mask.sum() < 10:
         return 0,h,0,w
@@ -357,3 +357,27 @@ def extract_target_boundary(img, target_mask):
     scharr = np.max(scharr,-1).astype(np.float32)/255
     scharr = scharr *  target_mask.astype(np.float32)
     return scharr
+
+
+def get_palette(num_cls):
+    """ Returns the color map for visualizing the segmentation mask.
+    Args:
+        num_cls: Number of classes
+    Returns:
+        The color map
+    """
+    n = num_cls
+    palette = [0] * (n * 3)
+    for j in range(0, n):
+        lab = j
+        palette[j * 3 + 0] = 0
+        palette[j * 3 + 1] = 0
+        palette[j * 3 + 2] = 0
+        i = 0
+        while lab:
+            palette[j * 3 + 0] |= (((lab >> 0) & 1) << (7 - i))
+            palette[j * 3 + 1] |= (((lab >> 1) & 1) << (7 - i))
+            palette[j * 3 + 2] |= (((lab >> 2) & 1) << (7 - i))
+            i += 1
+            lab >>= 3
+    return palette

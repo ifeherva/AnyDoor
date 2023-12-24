@@ -1,4 +1,5 @@
 from os.path import join
+from typing import Union
 
 import cv2
 from PIL import Image
@@ -155,7 +156,96 @@ class RedressDataset(BaseDataset):
         # this is fixed so we get shorter epochs
         return 10000 * self.num_devices * self.batch_size
 
+    @staticmethod
+    def process_sample(
+            ref_image: Union[str, np.ndarray, Image.Image],
+            ref_mask: Union[str, np.ndarray, Image.Image],
+            ref_dp_mask: Union[str, np.ndarray, Image.Image],
+            tar_image: Union[str, np.ndarray, Image.Image],
+            tar_mask: Union[str, np.ndarray, Image.Image],
+            tar_dp_mask: Union[str, np.ndarray, Image.Image],
+            btype: str,
+    ):
+        assert btype in ['full_body', 'upper_body']
+
+        # Prepare reference image
+        if isinstance(ref_image, str):
+            ref_image = cv2.imread(ref_image)  # BGR
+            ref_image = cv2.cvtColor(ref_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
+        elif isinstance(ref_image, Image.Image):
+            ref_image = np.array(ref_image)
+        else:
+            assert ref_image.ndim == 3  # must be HxWxC
+            assert ref_image.shape[-1] == 3  # must be RGB
+
+        # Prepare reference mask
+        if isinstance(ref_mask, str):
+            ref_mask = np.array(Image.open(ref_mask).convert('P'))  # HxW
+        elif isinstance(ref_mask, Image.Image):
+            if ref_mask.mode != 'P':
+                ref_mask = ref_mask.convert('P')
+            ref_mask = np.array(ref_mask)
+        else:
+            assert ref_mask.ndim == 2  # must be HxW
+        ref_mask = np.isin(ref_mask, MASK_GARMENT_ITEMS[btype]).astype(np.uint8)
+
+        # Prepare reference densepose
+        if isinstance(ref_dp_mask, str):
+            ref_dp_mask = np.array(Image.open(ref_dp_mask).convert('L'))  # HxW
+        elif isinstance(ref_dp_mask, Image.Image):
+            if ref_dp_mask.mode != 'L':
+                ref_dp_mask = ref_dp_mask.convert('L')
+            ref_dp_mask = np.array(ref_dp_mask)
+        else:
+            if ref_dp_mask.ndim == 3:
+                ref_dp_mask = ref_dp_mask[..., 0]
+            assert ref_dp_mask.ndim == 2  # must be HxW
+
+        # Prepare target image
+        if isinstance(tar_image, str):
+            tar_image = cv2.imread(tar_image)  # BGR
+            tar_image = cv2.cvtColor(tar_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
+        elif isinstance(tar_image, Image.Image):
+            tar_image = np.array(tar_image)
+        else:
+            assert tar_image.ndim == 3  # must be HxWxC
+            assert tar_image.shape[-1] == 3  # must be RGB
+
+        # Load target mask
+        if isinstance(tar_mask, str):
+            tar_mask = np.array(Image.open(tar_mask).convert('P'))  # HxW
+        elif isinstance(ref_image, Image.Image):
+            if tar_mask.mode != 'P':
+                tar_mask = tar_mask.convert('P')
+            tar_mask = np.array(tar_mask)
+        else:
+            assert tar_mask.ndim == 2  # must be HxW
+
+        # Prepare target densepose
+        if isinstance(tar_dp_mask, str):
+            tar_dp_mask = np.array(Image.open(tar_dp_mask).convert('L'))  # HxW
+        elif isinstance(tar_dp_mask, Image.Image):
+            if tar_dp_mask.mode != 'L':
+                tar_dp_mask = tar_dp_mask.convert('L')
+            tar_dp_mask = np.array(tar_dp_mask)
+        else:
+            if tar_dp_mask.ndim == 3:
+                tar_dp_mask = tar_dp_mask[..., 0]
+            assert tar_dp_mask.ndim == 2  # must be HxW
+
+        # We use the atr_mask+densepose to determine where to insert
+        tar_mask_dp = np.isin(tar_dp_mask, DP_MASK_TARGET_ITEMS[btype])
+        tar_mask_atr = np.isin(tar_mask, MASK_TARGET_ITEMS[btype])
+        tar_mask = np.logical_or(tar_mask_dp, tar_mask_atr).astype(np.uint8)
+
+        return ref_image, ref_mask, tar_image, tar_mask, ref_dp_mask, tar_dp_mask
+
     def get_sample(self, index):
+        """
+        Reference is what we paste, target is where we paste it
+        :param index:
+        :return:
+        """
         pair, btype = self.pairs[index]
         root = join(self.root, btype)
 
@@ -163,38 +253,48 @@ class RedressDataset(BaseDataset):
         if self.split == 'train':
             np.random.shuffle(pair)
 
-        ref_image_name, tar_image_name = pair  # reference is what we paste, target is where we paste it
+        ref_image_name, tar_image_name = pair
+        ref_image, ref_mask, tar_image, tar_mask, ref_dp_mask, tar_dp_mask = self.process_sample(
+            join(root, 'images', ref_image_name),
+            join(root, 'atr5_labels', ref_image_name.replace('jpg', 'png')),
+            join(root, 'densepose', ref_image_name.replace('jpg', 'png')),
+            join(root, 'images', tar_image_name),
+            join(root, 'atr5_labels', tar_image_name.replace('jpg', 'png')),
+            join(root, 'densepose', tar_image_name.replace('jpg', 'png')),
+            btype,
+        )
 
-        # Load reference image
-        ref_image_path = join(root, 'images', ref_image_name)
-        ref_image = cv2.imread(ref_image_path)  # BGR
-        ref_image = cv2.cvtColor(ref_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
-
-        # Load reference mask
-        ref_mask_path = join(root, 'atr5_labels', ref_image_name.replace('jpg', 'png'))
-        ref_mask = np.array(Image.open(ref_mask_path).convert('P'))  # HxW
-        ref_mask = np.isin(ref_mask, MASK_GARMENT_ITEMS[btype]).astype(np.uint8)
-
-        # Load reference densepose
-        ref_dp_mask_path = join(root, 'densepose', ref_image_name.replace('jpg', 'png'))
-        ref_dp_mask = np.array(Image.open(ref_dp_mask_path).convert('L'))  # HxW
-
-        # Load target image
-        tar_image_path = join(root, 'images', tar_image_name)
-        tar_image = cv2.imread(tar_image_path)  # BGR
-        tar_image = cv2.cvtColor(tar_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
-
-        # Load target densepose
-        tar_dp_mask_path = join(root, 'densepose', tar_image_name.replace('jpg', 'png'))
-        tar_dp_mask = np.array(Image.open(tar_dp_mask_path).convert('L'))  # HxW
-
-        # Load target mask
-        tar_mask_path = join(root, 'atr5_labels', tar_image_name.replace('jpg', 'png'))
-        tar_mask = np.array(Image.open(tar_mask_path).convert('P'))  # HxW
-        # We use the atr_mask+densepose to determine where to insert
-        tar_mask_dp = np.isin(tar_dp_mask, DP_MASK_TARGET_ITEMS[btype])
-        tar_mask_atr = np.isin(tar_mask, MASK_TARGET_ITEMS[btype])
-        tar_mask = np.logical_or(tar_mask_dp, tar_mask_atr).astype(np.uint8)
+        # # Load reference image
+        # ref_image_path = join(root, 'images', ref_image_name)
+        # ref_image = cv2.imread(ref_image_path)  # BGR
+        # ref_image = cv2.cvtColor(ref_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
+        #
+        # # Load reference mask
+        # ref_mask_path = join(root, 'atr5_labels', ref_image_name.replace('jpg', 'png'))
+        # ref_mask = np.array(Image.open(ref_mask_path).convert('P'))  # HxW
+        # ref_mask = np.isin(ref_mask, MASK_GARMENT_ITEMS[btype]).astype(np.uint8)
+        #
+        # # Load reference densepose
+        # ref_dp_mask_path = join(root, 'densepose', ref_image_name.replace('jpg', 'png'))
+        # ref_dp_mask = np.array(Image.open(ref_dp_mask_path).convert('L'))  # HxW
+        #
+        # # Load target image
+        # tar_image_path = join(root, 'images', tar_image_name)
+        # tar_image = cv2.imread(tar_image_path)  # BGR
+        # tar_image = cv2.cvtColor(tar_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
+        #
+        # # Load target densepose
+        # tar_dp_mask_path = join(root, 'densepose', tar_image_name.replace('jpg', 'png'))
+        # tar_dp_mask = np.array(Image.open(tar_dp_mask_path).convert('L'))  # HxW
+        #
+        # # Load target mask
+        # tar_mask_path = join(root, 'atr5_labels', tar_image_name.replace('jpg', 'png'))
+        # tar_mask = np.array(Image.open(tar_mask_path).convert('P'))  # HxW
+        #
+        # # We use the atr_mask+densepose to determine where to insert
+        # tar_mask_dp = np.isin(tar_dp_mask, DP_MASK_TARGET_ITEMS[btype])
+        # tar_mask_atr = np.isin(tar_mask, MASK_TARGET_ITEMS[btype])
+        # tar_mask = np.logical_or(tar_mask_dp, tar_mask_atr).astype(np.uint8)
 
         item_with_collage = self.process_pairs(ref_image, ref_mask, tar_image, tar_mask, max_ratio=1.0,
                                                ref_dp_mask=ref_dp_mask, tar_dp_mask=tar_dp_mask)

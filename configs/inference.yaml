@@ -1,3 +1,3 @@
-pretrained_model: weight/epoch=1-step=8687.ckpt
-config_file: configs/anydoor.yaml
+pretrained_model: weight/v1/models2_anydoor_v1_step_150k.ckpt
+config_file: configs/anydoor_redress.yaml
 save_memory: False
