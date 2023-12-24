@@ -62,6 +62,7 @@ class ImageLogger(Callback):
             if is_train:
                 pl_module.eval()
 
+            self.log_images_kwargs['rank'] = rank
             with torch.inference_mode():
                 images = pl_module.log_images(batch, split=split, **self.log_images_kwargs)
 
