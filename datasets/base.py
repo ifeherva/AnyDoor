@@ -1,3 +1,4 @@
+import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image
 import cv2
@@ -93,7 +94,8 @@ class BaseDataset(Dataset):
             return True 
 
     def process_pairs(self, ref_image, ref_mask, tar_image, tar_mask, max_ratio=0.8,
-                      ref_dp_mask=None, tar_dp_mask=None, do_aug=True):
+                      ref_dp_mask=None, tar_dp_mask=None, do_aug=True,
+                      face_mask=None, hand_mask=None):
         assert mask_score(ref_mask) > 0.50
         assert self.check_mask_area(ref_mask)
         assert self.check_mask_area(tar_mask)
@@ -132,7 +134,7 @@ class BaseDataset(Dataset):
         if tar_dp_mask is not None:
             tar_dp_mask_t = pad_to_square(tar_dp_mask, pad_value=0, random=False)
             tar_dp_mask_t = cv2.resize(tar_dp_mask_t.astype(np.uint8), (224, 224),
-                                     interpolation=cv2.INTER_NEAREST).astype(np.float32)
+                                       interpolation=cv2.INTER_NEAREST).astype(np.float32)
             # to one-hot
             tar_dp_mask_onehot = (np.arange(25) == tar_dp_mask_t[..., None]).astype(np.uint8)  # HxWx25
         else:
@@ -156,8 +158,15 @@ class BaseDataset(Dataset):
         tar_box_yyxx = get_bbox_from_mask(tar_mask)
         tar_box_yyxx = expand_bbox(tar_mask, tar_box_yyxx, ratio=[1.1, 1.2])  # 1.1  1.3
         assert self.check_region_size(tar_mask, tar_box_yyxx, ratio=max_ratio, mode='max')
-        
-        # Cropping around the target object 
+
+        unmask_mask = np.zeros_like(tar_image[:, :, 0]).astype(np.uint8)
+        if hand_mask is not None:
+            unmask_mask = unmask_mask + hand_mask
+        if face_mask is not None:
+            unmask_mask = unmask_mask + face_mask
+        unmask_mask = unmask_mask.clip(0, 1)
+
+        # Cropping around the target object
         tar_box_yyxx_crop = expand_bbox(tar_image, tar_box_yyxx, ratio=[1.3, 3.0])
         tar_box_yyxx_crop = box2squre(tar_image, tar_box_yyxx_crop)  # crop box
         y1, y2, x1, x2 = tar_box_yyxx_crop
@@ -167,7 +176,9 @@ class BaseDataset(Dataset):
         else:
             cropped_target_dp_mask = None
 
+        unmask_mask = unmask_mask[y1:y2, x1:x2]
         cropped_tar_mask = tar_mask[y1:y2, x1:x2]
+
         tar_box_yyxx = box_in_box(tar_box_yyxx, tar_box_yyxx_crop)
         y1, y2, x1, x2 = tar_box_yyxx
 
@@ -176,7 +187,7 @@ class BaseDataset(Dataset):
         # ref_mask_compose = cv2.resize(ref_mask_compose.astype(np.uint8), (x2-x1, y2-y1))
         # ref_mask_compose = (ref_mask_compose > 128).astype(np.uint8)
 
-        collage = cropped_target_image.copy() 
+        collage = cropped_target_image.copy()
         collage[y1:y2, x1:x2, :] = ref_image_collage
 
         collage_mask = np.zeros_like(cropped_target_image)
@@ -203,15 +214,24 @@ class BaseDataset(Dataset):
             cropped_target_dp_mask = cv2.resize(cropped_target_dp_mask.astype(np.uint8), (512, 512),
                                                 interpolation=cv2.INTER_NEAREST).astype(np.float32)
             cropped_target_dp_mask = cropped_target_dp_mask / 24  # number of DP classes -1
+
+        unmask_mask = pad_to_square(unmask_mask, pad_value=0, random=False).astype(np.uint8)
+        unmask_mask = cv2.resize(unmask_mask, (512, 512), interpolation=cv2.INTER_NEAREST)
+        erode_radius = 3
+        unmask_mask = cv2.erode(unmask_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                                                       (2 * erode_radius + 1, 2 * erode_radius + 1))).astype('bool')
+        collage = np.where(np.expand_dims(unmask_mask, 2), cropped_target_image, collage)
+        collage_mask = collage_mask[:, :, 1]
+        collage_mask[unmask_mask] = 0
         
         # Preparing dataloader items
         masked_ref_image_aug = masked_ref_image_aug / 255
         cropped_target_image = cropped_target_image / 127.5 - 1.0
         collage = collage / 127.5 - 1.0 
-        collage = np.concatenate([collage, collage_mask[:, :, :1]], -1)
+        collage = np.concatenate([collage, np.expand_dims(collage_mask, 2)], -1)
 
         if cropped_target_dp_mask is not None:
-            collage = np.concatenate([collage, cropped_target_dp_mask[:,:, None]], -1)
+            collage = np.concatenate([collage, cropped_target_dp_mask[:, :, None]], -1)
 
         if ref_dp_mask_onehot is not None:
             masked_ref_image_aug = np.concatenate([masked_ref_image_aug, ref_dp_mask_onehot], -1)

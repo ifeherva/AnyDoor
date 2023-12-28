@@ -17,6 +17,7 @@ def parse_args():
 
     # Data
     parser.add_argument('--data-root', type=str, default='/media/istvanfe/MLStuff/Datasets/Redress')
+    parser.add_argument('--face-detect', action='store_true')
 
     # Model
     parser.add_argument('--model-conf', type=str, default='./configs/anydoor_redress.yaml')
@@ -58,7 +59,12 @@ def train_ad(opt):
 
     model.learning_rate = opt.lr
 
-    dataset = RedressDataset(root=opt.data_root, num_devices=n_gpus, batch_size=opt.batch_size)
+    dataset = RedressDataset(
+        root=opt.data_root,
+        num_devices=n_gpus,
+        batch_size=opt.batch_size,
+        use_face_detect=opt.face_detect,
+    )
     dataloader = DataLoader(dataset, num_workers=opt.num_workers, batch_size=opt.batch_size, shuffle=True)
 
     image_logger = ImageLogger(batch_frequency=opt.log_frequency, use_wandb=not opt.no_wandb)

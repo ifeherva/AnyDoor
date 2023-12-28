@@ -1,12 +1,12 @@
 from os.path import join
-from typing import Union
+from typing import Union, Optional
 
 import cv2
 from PIL import Image
 import numpy as np
 
 from datasets.base import BaseDataset
-
+from segmentation.face_segmenter import FaceSegmenter
 
 ATR5_MAP = {
     'background': 0,
@@ -136,13 +136,17 @@ class RedressDataset(BaseDataset):
                  num_devices: int = 1,
                  batch_size: int = 8,
                  split='train',
-                 body_types=('full_body', 'upper_body')):
+                 body_types=('full_body', 'upper_body'),
+                 augment: Optional[bool] = None,
+                 use_face_detect=False,
+                 ):
         super().__init__()
         self.root = root
         self.pairs = []
         self.split = split
         self.num_devices = num_devices
         self.batch_size = batch_size
+        self.augment = augment or (split == 'train')
 
         for btype in body_types:
             broot = join(self.root, btype)
@@ -151,13 +155,15 @@ class RedressDataset(BaseDataset):
                                for x in f.readlines()
                                if len(x.strip().split(',')) == 2]
 
+        self.face_segmenter = FaceSegmenter() if use_face_detect else None
+
     def __len__(self) -> int:
         #return len(self.pairs)
         # this is fixed so we get shorter epochs
-        return 10000 * self.num_devices * self.batch_size
+        return min(10000 * self.num_devices * self.batch_size, len(self.pairs))
 
-    @staticmethod
     def process_sample(
+            self,
             ref_image: Union[str, np.ndarray, Image.Image],
             ref_mask: Union[str, np.ndarray, Image.Image],
             ref_dp_mask: Union[str, np.ndarray, Image.Image],
@@ -236,9 +242,24 @@ class RedressDataset(BaseDataset):
         # We use the atr_mask+densepose to determine where to insert
         tar_mask_dp = np.isin(tar_dp_mask, DP_MASK_TARGET_ITEMS[btype])
         tar_mask_atr = np.isin(tar_mask, MASK_TARGET_ITEMS[btype])
+
+        face_mask = np.logical_or(
+            np.isin(tar_dp_mask, [23, 24]),
+            np.isin(tar_mask_atr, 2)
+        ).astype(np.uint8)
+
+        hand_mask = np.logical_and(
+            np.isin(tar_dp_mask, [3, 4]),
+            np.isin(tar_mask, 5)
+        ).astype(np.uint8)
+
+        if self.face_segmenter is not None:
+            face_mask_square = self.face_segmenter(tar_image)
+            face_mask = face_mask * face_mask_square
+
         tar_mask = np.logical_or(tar_mask_dp, tar_mask_atr).astype(np.uint8)
 
-        return ref_image, ref_mask, tar_image, tar_mask, ref_dp_mask, tar_dp_mask
+        return ref_image, ref_mask, tar_image, tar_mask, ref_dp_mask, tar_dp_mask, face_mask, hand_mask
 
     def get_sample(self, index):
         """
@@ -254,7 +275,7 @@ class RedressDataset(BaseDataset):
             np.random.shuffle(pair)
 
         ref_image_name, tar_image_name = pair
-        ref_image, ref_mask, tar_image, tar_mask, ref_dp_mask, tar_dp_mask = self.process_sample(
+        ref_image, ref_mask, tar_image, tar_mask, ref_dp_mask, tar_dp_mask, face_mask, hand_mask = self.process_sample(
             join(root, 'images', ref_image_name),
             join(root, 'atr5_labels', ref_image_name.replace('jpg', 'png')),
             join(root, 'densepose', ref_image_name.replace('jpg', 'png')),
@@ -264,40 +285,16 @@ class RedressDataset(BaseDataset):
             btype,
         )
 
-        # # Load reference image
-        # ref_image_path = join(root, 'images', ref_image_name)
-        # ref_image = cv2.imread(ref_image_path)  # BGR
-        # ref_image = cv2.cvtColor(ref_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
-        #
-        # # Load reference mask
-        # ref_mask_path = join(root, 'atr5_labels', ref_image_name.replace('jpg', 'png'))
-        # ref_mask = np.array(Image.open(ref_mask_path).convert('P'))  # HxW
-        # ref_mask = np.isin(ref_mask, MASK_GARMENT_ITEMS[btype]).astype(np.uint8)
-        #
-        # # Load reference densepose
-        # ref_dp_mask_path = join(root, 'densepose', ref_image_name.replace('jpg', 'png'))
-        # ref_dp_mask = np.array(Image.open(ref_dp_mask_path).convert('L'))  # HxW
-        #
-        # # Load target image
-        # tar_image_path = join(root, 'images', tar_image_name)
-        # tar_image = cv2.imread(tar_image_path)  # BGR
-        # tar_image = cv2.cvtColor(tar_image, cv2.COLOR_BGR2RGB)  # HxWx3 - RGB
-        #
-        # # Load target densepose
-        # tar_dp_mask_path = join(root, 'densepose', tar_image_name.replace('jpg', 'png'))
-        # tar_dp_mask = np.array(Image.open(tar_dp_mask_path).convert('L'))  # HxW
-        #
-        # # Load target mask
-        # tar_mask_path = join(root, 'atr5_labels', tar_image_name.replace('jpg', 'png'))
-        # tar_mask = np.array(Image.open(tar_mask_path).convert('P'))  # HxW
-        #
-        # # We use the atr_mask+densepose to determine where to insert
-        # tar_mask_dp = np.isin(tar_dp_mask, DP_MASK_TARGET_ITEMS[btype])
-        # tar_mask_atr = np.isin(tar_mask, MASK_TARGET_ITEMS[btype])
-        # tar_mask = np.logical_or(tar_mask_dp, tar_mask_atr).astype(np.uint8)
-
-        item_with_collage = self.process_pairs(ref_image, ref_mask, tar_image, tar_mask, max_ratio=1.0,
-                                               ref_dp_mask=ref_dp_mask, tar_dp_mask=tar_dp_mask)
+        item_with_collage = self.process_pairs(
+            ref_image, ref_mask,
+            tar_image, tar_mask,
+            max_ratio=1.0,
+            ref_dp_mask=ref_dp_mask,
+            tar_dp_mask=tar_dp_mask,
+            do_aug=self.augment,
+            face_mask=face_mask,
+            hand_mask=hand_mask,
+        )
         sampled_time_steps = self.sample_timestep()
         item_with_collage['time_steps'] = sampled_time_steps
         return item_with_collage
