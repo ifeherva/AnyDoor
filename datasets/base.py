@@ -31,7 +31,7 @@ class BaseDataset(Dataset):
             #A.Rotate(limit=20, border_mode=cv2.BORDER_CONSTANT,  value=(0,0,0)),
             ])
 
-        transformed = transform(image=image.astype(np.uint8), mask = mask)
+        transformed = transform(image=image.astype(np.uint8), mask=mask)
         transformed_image = transformed["image"]
         transformed_mask = transformed["mask"]
         return transformed_image, transformed_mask
@@ -93,7 +93,7 @@ class BaseDataset(Dataset):
             return True 
 
     def process_pairs(self, ref_image, ref_mask, tar_image, tar_mask, max_ratio=0.8,
-                      ref_dp_mask=None, tar_dp_mask=None):
+                      ref_dp_mask=None, tar_dp_mask=None, do_aug=True):
         assert mask_score(ref_mask) > 0.50
         assert self.check_mask_area(ref_mask)
         assert self.check_mask_area(tar_mask)
@@ -143,10 +143,13 @@ class BaseDataset(Dataset):
         ref_mask = ref_mask_3[:, :, 0]
 
         # Getting for high-freqency map
-        masked_ref_image_compose, ref_mask_compose = self.aug_data_mask(masked_ref_image, ref_mask)
-        masked_ref_image_aug = masked_ref_image_compose.copy()
+        if do_aug:
+            masked_ref_image_compose, ref_mask_compose = self.aug_data_mask(masked_ref_image, ref_mask)
+            masked_ref_image_aug = masked_ref_image_compose.copy()
+        else:
+            masked_ref_image_compose, ref_mask_compose = masked_ref_image, ref_mask
+            masked_ref_image_aug = masked_ref_image_compose.copy()
 
-        # ref_mask_3 = np.stack([ref_mask_compose, ref_mask_compose, ref_mask_compose], -1)
         ref_image_collage = sobel(masked_ref_image_compose, ref_mask_compose/255)
 
         # ========= Training Target ===========
